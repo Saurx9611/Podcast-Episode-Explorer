@@ -1,0 +1,6 @@
+{
+  "name": "Podcast Episode Explorer",
+  "description": "A technical podcast intelligence and exploration platform for long-form conversations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
