@@ -45,19 +45,22 @@ const FALLBACK_PROJECTS: Project[] = [
 ];
 
 export default function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>(FALLBACK_PROJECTS);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDesc, setNewProjectDesc] = useState('');
 
   const loadProjects = async () => {
     try {
+      setLoading(true);
       const data = await getProjects();
-      if (data && data.length > 0) {
-        setProjects(data);
-      }
-    } catch {
-      // Keep fallback
+      setProjects(data || []);
+    } catch (err) {
+      console.warn('Backend projects error:', err);
+      setProjects([]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -95,42 +98,53 @@ export default function ProjectsPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {projects.map((project, idx) => (
-          <div 
-            key={project.id || idx} 
-            className="bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-border-subtle)] rounded-lg p-5 transition-all duration-150 group flex flex-col justify-between space-y-4"
-          >
-            <div className="space-y-3">
-              <div className="flex justify-between items-start">
-                <div className="p-2 bg-[var(--color-surface-elevated)] rounded-md text-[var(--color-accent)] border border-[var(--color-border)]">
-                  <FolderGit2 className="w-4 h-4" />
+      {projects.length === 0 ? (
+        <div className="border border-[var(--color-border)] rounded-lg bg-[var(--color-surface)] p-12 text-center text-[var(--color-muted)] space-y-3">
+          <FolderGit2 className="w-8 h-8 mx-auto text-[var(--color-muted)] opacity-50" />
+          <p className="text-sm font-medium text-[var(--color-primary)]">No project workspaces yet</p>
+          <p className="text-xs text-[var(--color-muted)]">Create a project workspace to organize episodes and isolate vector indexing.</p>
+          <Button variant="accent" size="sm" onClick={() => setIsModalOpen(true)} className="gap-2 text-xs">
+            <Plus className="w-3.5 h-3.5" /> Create First Project
+          </Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {projects.map((project, idx) => (
+            <div 
+              key={project.id || idx} 
+              className="bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-border-subtle)] rounded-lg p-5 transition-all duration-150 group flex flex-col justify-between space-y-4"
+            >
+              <div className="space-y-3">
+                <div className="flex justify-between items-start">
+                  <div className="p-2 bg-[var(--color-surface-elevated)] rounded-md text-[var(--color-accent)] border border-[var(--color-border)]">
+                    <FolderGit2 className="w-4 h-4" />
+                  </div>
+                  <Badge variant="secondary" className="font-mono text-[10px]">Active</Badge>
                 </div>
-                <Badge variant="secondary" className="font-mono text-[10px]">Active</Badge>
+                
+                <div>
+                  <h2 className="text-sm font-semibold text-[var(--color-primary)] group-hover:text-[var(--color-accent)] transition-colors">
+                    {project.name}
+                  </h2>
+                  <p className="text-xs text-[var(--color-secondary)] mt-1 line-clamp-2 leading-relaxed">
+                    {project.description || 'No description provided.'}
+                  </p>
+                </div>
               </div>
-              
-              <div>
-                <h2 className="text-sm font-semibold text-[var(--color-primary)] group-hover:text-[var(--color-accent)] transition-colors">
-                  {project.name}
-                </h2>
-                <p className="text-xs text-[var(--color-secondary)] mt-1 line-clamp-2 leading-relaxed">
-                  {project.description || 'No description provided.'}
-                </p>
-              </div>
-            </div>
 
-            <div className="flex items-center justify-between pt-3 border-t border-[var(--color-border)] text-xs font-mono text-[var(--color-muted)]">
-              <div className="flex items-center gap-1.5">
-                <Library className="w-3.5 h-3.5" />
-                <span>Indexed Collection</span>
+              <div className="flex items-center justify-between pt-3 border-t border-[var(--color-border)] text-xs font-mono text-[var(--color-muted)]">
+                <div className="flex items-center gap-1.5">
+                  <Library className="w-3.5 h-3.5" />
+                  <span>Indexed Collection</span>
+                </div>
+                <Link href={`/episodes?project=${project.id}`} className="text-[var(--color-accent)] hover:underline text-[11px]">
+                  Browse →
+                </Link>
               </div>
-              <Link href={`/episodes?project=${project.id}`} className="text-[var(--color-accent)] hover:underline text-[11px]">
-                Browse →
-              </Link>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       <Modal
         isOpen={isModalOpen}

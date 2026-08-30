@@ -1,15 +1,22 @@
 import os
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from backend.core.config import settings
+from backend.core.database import init_db
 from backend.core.exceptions import AppException
 from backend.api.routes import api_router
 
 # Ensure storage path exists
 os.makedirs(settings.STORAGE_PATH, exist_ok=True)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -17,6 +24,7 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     docs_url=f"{settings.API_V1_STR}/docs",
     redoc_url=f"{settings.API_V1_STR}/redoc",
+    lifespan=lifespan,
 )
 
 # --- Exception Handlers ---

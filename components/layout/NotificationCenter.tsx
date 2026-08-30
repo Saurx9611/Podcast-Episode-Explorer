@@ -85,14 +85,9 @@ export function NotificationCenter() {
     try {
       setLoading(true);
       const data = await getNotifications();
-      if (data && data.length > 0) {
-        setNotifications(data);
-      } else {
-        setNotifications(FALLBACK_NOTIFICATIONS);
-      }
+      setNotifications(data || []);
     } catch (err) {
-      console.warn('Backend notifications endpoint unavailable, using fallback:', err);
-      setNotifications(FALLBACK_NOTIFICATIONS);
+      console.warn('Backend notifications endpoint error:', err);
     } finally {
       setLoading(false);
     }

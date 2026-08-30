@@ -34,7 +34,7 @@ def get_saved_searches(
         results.append(resp)
     return results
 
-@router.post("/saved", response_model=SavedSearchResponse)
+@router.post("/saved", response_model=SavedSearchResponse, status_code=201)
 def create_saved_search(
     search_in: SavedSearchCreate,
     search_repo: SearchRepository = Depends(get_search_repo),

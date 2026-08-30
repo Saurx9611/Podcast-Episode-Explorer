@@ -12,20 +12,28 @@ class ProcessingRepository(BaseRepository[ProcessingJob]):
         super().__init__(ProcessingJob, db)
 
     def get_all_jobs(self, limit: int = 50) -> List[ProcessingJob]:
+        from sqlalchemy.orm import joinedload
         return (
             self.db.query(ProcessingJob)
+            .options(joinedload(ProcessingJob.episode))
             .order_by(ProcessingJob.started_at.desc())
             .limit(limit)
             .all()
         )
 
     def get_jobs_by_episode(self, episode_id: str) -> List[ProcessingJob]:
+        from sqlalchemy.orm import joinedload
         return (
             self.db.query(ProcessingJob)
+            .options(joinedload(ProcessingJob.episode))
             .filter(ProcessingJob.episode_id == episode_id)
             .order_by(ProcessingJob.started_at.desc())
             .all()
         )
+
+    def get_by_episode_id(self, episode_id: str) -> Optional[ProcessingJob]:
+        jobs = self.get_jobs_by_episode(episode_id)
+        return jobs[0] if jobs else None
 
     def get_active_jobs(self) -> List[ProcessingJob]:
         return (

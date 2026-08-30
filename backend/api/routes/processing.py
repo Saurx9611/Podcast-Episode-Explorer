@@ -40,11 +40,13 @@ def format_stage_label(stage: Optional[str], status: Optional[str]) -> str:
     stage_map = {
         "upload": "Uploaded",
         "queued": "Queued",
+        "downloading": "Downloading audio",
         "transcribing": "Transcribing",
         "speaker_detection": "Identifying speakers",
         "chunking": "Temporal chunking",
         "embedding": "Generating embeddings",
         "indexing": "Vector indexing",
+        "insights": "Synthesizing AI insights",
     }
     return stage_map.get(norm_stage, (stage or "Processing").capitalize())
 
@@ -108,6 +110,10 @@ def cancel_processing_job(
     job = processing_repo.get_by_id(id)
     if not job:
         raise NotFoundException("ProcessingJob", id)
+
+    # Cancel active background processing task if running
+    if job.episode_id:
+        pipeline_processor.cancel(job.episode_id)
 
     job.status = "failed"
     job.error_message = "Cancelled by user"

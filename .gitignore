@@ -189,9 +189,12 @@ Desktop.ini
 *~
 
 # ------------------------------------------
-# Temporary Files
+# Temporary Files & Agent Artifacts
 # ------------------------------------------
 tmp/
 temp/
 *.tmp
 *.temp
+scratch/
+.tempmediaStorage/
+.system_generated/

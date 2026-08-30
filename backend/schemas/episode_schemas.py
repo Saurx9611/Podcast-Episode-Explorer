@@ -73,6 +73,12 @@ class EpisodeBase(BaseModel):
     title: str
     description: Optional[str] = None
     language: Optional[str] = "en"
+    podcast_id: Optional[str] = None
+    guid: Optional[str] = None
+    artwork_url: Optional[str] = None
+    episode_number: Optional[int] = None
+    season_number: Optional[int] = None
+    publication_date: Optional[datetime] = None
 
 class EpisodeCreate(EpisodeBase):
     project_id: Optional[str] = None
@@ -81,9 +87,14 @@ class EpisodeUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     project_id: Optional[str] = None
+    podcast_id: Optional[str] = None
     status: Optional[str] = None
     duration: Optional[float] = None
     language: Optional[str] = None
+    artwork_url: Optional[str] = None
+    episode_number: Optional[int] = None
+    season_number: Optional[int] = None
+    publication_date: Optional[datetime] = None
 
 class EpisodeResponse(EpisodeBase):
     id: str
@@ -106,6 +117,7 @@ class EpisodeResponse(EpisodeBase):
 
     # UI presentation fields
     project_name: Optional[str] = None
+    podcast_title: Optional[str] = None
     duration_formatted: Optional[str] = None
     file_size_formatted: Optional[str] = None
     date_formatted: Optional[str] = None
@@ -117,3 +129,11 @@ class EpisodeUploadResponse(BaseModel):
     status: str
     title: str
     message: str = "Episode uploaded and queued for processing."
+
+class EpisodeDownloadResponse(BaseModel):
+    id: str
+    status: str
+    title: str
+    audio_url: Optional[str] = None
+    file_size: Optional[int] = None
+    message: str = "Episode audio downloaded successfully."

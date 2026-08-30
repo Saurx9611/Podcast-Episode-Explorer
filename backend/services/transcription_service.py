@@ -56,3 +56,14 @@ class MockTranscriptionService(BaseTranscriptionService):
                 "confidence": 0.98,
             }
         ]
+
+def get_transcription_service(provider: str = None) -> BaseTranscriptionService:
+    """Factory to retrieve the appropriate transcription service provider."""
+    from backend.core.config import settings
+    selected_provider = (provider or settings.TRANSCRIPTION_PROVIDER or "mock").lower()
+
+    if selected_provider in ("faster_whisper", "whisper", "real"):
+        from backend.services.whisper_transcription_service import FasterWhisperTranscriptionService
+        return FasterWhisperTranscriptionService()
+    
+    return MockTranscriptionService()

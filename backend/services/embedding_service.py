@@ -60,3 +60,14 @@ class MockEmbeddingService(BaseEmbeddingService):
     async def embed_batch(self, texts: List[str]) -> List[List[float]]:
         await asyncio.sleep(0.02)
         return [self._generate_vector(t) for t in texts]
+
+def get_embedding_service(provider: str = None) -> BaseEmbeddingService:
+    """Factory to retrieve the configured embedding service."""
+    from backend.core.config import settings
+    selected_provider = (provider or settings.EMBEDDING_PROVIDER or "mock").lower()
+
+    if selected_provider in ("fastembed", "real", "bge"):
+        from backend.services.fastembed_service import FastEmbedEmbeddingService
+        return FastEmbedEmbeddingService()
+
+    return MockEmbeddingService(dimension=settings.EMBEDDING_DIMENSION)

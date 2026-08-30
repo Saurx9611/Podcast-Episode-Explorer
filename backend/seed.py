@@ -5,7 +5,8 @@ from datetime import datetime, timedelta, timezone
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.core.database import SessionLocal, Base, engine
+from backend.core.config import settings
+from backend.core.database import SessionLocal, Base, engine, init_db
 from backend.models import (
     User, Project, Episode, Speaker, TranscriptSegment,
     Embedding, ProcessingJob, SavedSearch, Notification, EpisodeInsight
@@ -15,8 +16,8 @@ def utc_now():
     return datetime.now(timezone.utc)
 
 def seed_db():
-    # Ensure tables exist
-    Base.metadata.create_all(bind=engine)
+    # Ensure tables and vector extensions exist
+    init_db()
     db = SessionLocal()
 
     try:
@@ -250,12 +251,13 @@ def seed_db():
             db.add_all(segments)
             db.commit()
 
-            # 6. Embeddings for segments
+            # 6. Embeddings for segments (dynamic dimension)
+            dim = settings.EMBEDDING_DIMENSION
             for seg in segments:
                 emb = Embedding(
                     id=f"emb-{seg.id}",
                     segment_id=seg.id,
-                    embedding=[0.01 * (i % 10) for i in range(1536)],
+                    embedding=[0.01 * (i % 10) for i in range(dim)],
                 )
                 db.add(emb)
             db.commit()

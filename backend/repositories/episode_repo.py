@@ -14,14 +14,18 @@ class EpisodeRepository(BaseRepository[Episode]):
     def get_episodes(
         self,
         project_id: Optional[str] = None,
+        podcast_id: Optional[str] = None,
         status: Optional[str] = None,
         query: Optional[str] = None,
         skip: int = 0,
         limit: int = 100,
     ) -> List[Episode]:
-        q = self.db.query(Episode)
+        from sqlalchemy.orm import joinedload
+        q = self.db.query(Episode).options(joinedload(Episode.project), joinedload(Episode.podcast))
         if project_id:
             q = q.filter(Episode.project_id == project_id)
+        if podcast_id:
+            q = q.filter(Episode.podcast_id == podcast_id)
         if status and status.lower() != "all":
             q = q.filter(Episode.status.ilike(status))
         if query:
@@ -32,6 +36,31 @@ class EpisodeRepository(BaseRepository[Episode]):
                 )
             )
         return q.order_by(desc(Episode.created_at)).offset(skip).limit(limit).all()
+
+    def get_by_guid(self, podcast_id: Optional[str], guid: str) -> Optional[Episode]:
+        """Lookup episode by RSS GUID within a podcast (or globally) for deduplication."""
+        if not guid:
+            return None
+        q = self.db.query(Episode).filter(Episode.guid == guid)
+        if podcast_id:
+            q = q.filter(Episode.podcast_id == podcast_id)
+        return q.first()
+
+    def get_by_audio_url_or_title(self, podcast_id: Optional[str], audio_url: Optional[str], title: str) -> Optional[Episode]:
+        """Fallback deduplication check by audio URL or exact title."""
+        if audio_url:
+            q = self.db.query(Episode).filter(Episode.audio_url == audio_url)
+            if podcast_id:
+                q = q.filter(Episode.podcast_id == podcast_id)
+            match = q.first()
+            if match:
+                return match
+        if title:
+            q = self.db.query(Episode).filter(Episode.title == title)
+            if podcast_id:
+                q = q.filter(Episode.podcast_id == podcast_id)
+            return q.first()
+        return None
 
     def get_transcript(self, episode_id: str) -> List[TranscriptSegment]:
         return (

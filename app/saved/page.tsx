@@ -111,10 +111,10 @@ export default function SavedSearchesPage() {
     try {
       setLoading(true);
       const data = await getSavedSearches();
-      setSearches(data);
+      setSearches(data || []);
     } catch (err: any) {
-      console.warn('Backend unavailable, using fallback saved searches:', err);
-      setSearches(FALLBACK_SEARCHES);
+      console.warn('Backend saved searches error:', err);
+      setSearches([]);
     } finally {
       setLoading(false);
     }

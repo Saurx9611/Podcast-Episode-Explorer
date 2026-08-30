@@ -79,43 +79,79 @@ class SemanticSearchService:
         # 1. Generate query embedding
         query_vector = await embedding_service.embed_text(request.query)
 
-        # 2. Build Query
-        q = (
-            db.query(Embedding, TranscriptSegment, Episode)
-            .join(TranscriptSegment, Embedding.segment_id == TranscriptSegment.id)
-            .join(Episode, TranscriptSegment.episode_id == Episode.id)
-            .options(joinedload(TranscriptSegment.speaker))
-        )
+        # 2. Check dialect to determine pgvector execution
+        is_postgres = False
+        if db.bind and db.bind.dialect.name == "postgresql":
+            is_postgres = True
 
-        # 3. Apply Filters
-        if request.project_id and request.project_id != "all":
-            q = q.filter(Episode.project_id == request.project_id)
+        top_results = []
+        if is_postgres:
+            # Native PostgreSQL pgvector cosine distance calculation in SQL
+            distance_expr = Embedding.embedding.cosine_distance(query_vector)
+            similarity_expr = (1.0 - distance_expr).label("similarity")
 
-        if request.episode_ids:
-            q = q.filter(Episode.id.in_(request.episode_ids))
+            q = (
+                db.query(Embedding, TranscriptSegment, Episode, similarity_expr)
+                .join(TranscriptSegment, Embedding.segment_id == TranscriptSegment.id)
+                .join(Episode, TranscriptSegment.episode_id == Episode.id)
+                .options(joinedload(TranscriptSegment.speaker))
+            )
 
-        if request.speaker_ids and "all" not in request.speaker_ids:
-            q = q.filter(TranscriptSegment.speaker_id.in_(request.speaker_ids))
+            # Apply SQL Filters
+            if request.project_id and request.project_id != "all":
+                q = q.filter(Episode.project_id == request.project_id)
 
-        candidates = q.all()
-        scored_results = []
+            if request.episode_ids:
+                q = q.filter(Episode.id.in_(request.episode_ids))
 
-        for emb, seg, ep in candidates:
-            emb_vec = emb.embedding
-            # If stored as list/json
-            if hasattr(emb_vec, "tolist"):
-                emb_vec = emb_vec.tolist()
-            elif isinstance(emb_vec, str):
-                import json
-                emb_vec = json.loads(emb_vec)
+            if request.speaker_ids and "all" not in request.speaker_ids:
+                q = q.filter(TranscriptSegment.speaker_id.in_(request.speaker_ids))
 
-            sim = cosine_similarity(query_vector, emb_vec)
-            if sim >= request.similarity_threshold:
-                scored_results.append((sim, emb, seg, ep))
+            # Apply similarity threshold in SQL
+            if request.similarity_threshold > 0:
+                q = q.filter(similarity_expr >= request.similarity_threshold)
 
-        # 4. Rank by similarity score descending
-        scored_results.sort(key=lambda x: x[0], reverse=True)
-        top_results = scored_results[:request.limit]
+            # Order by distance ascending (similarity descending) and limit in SQL
+            top_records = q.order_by(distance_expr.asc()).limit(request.limit).all()
+
+            top_results = [
+                (float(sim), emb, seg, ep) for emb, seg, ep, sim in top_records
+            ]
+        else:
+            # SQLite fallback for local test environments without pgvector
+            q = (
+                db.query(Embedding, TranscriptSegment, Episode)
+                .join(TranscriptSegment, Embedding.segment_id == TranscriptSegment.id)
+                .join(Episode, TranscriptSegment.episode_id == Episode.id)
+                .options(joinedload(TranscriptSegment.speaker))
+            )
+
+            if request.project_id and request.project_id != "all":
+                q = q.filter(Episode.project_id == request.project_id)
+
+            if request.episode_ids:
+                q = q.filter(Episode.id.in_(request.episode_ids))
+
+            if request.speaker_ids and "all" not in request.speaker_ids:
+                q = q.filter(TranscriptSegment.speaker_id.in_(request.speaker_ids))
+
+            candidates = q.all()
+            scored_results = []
+
+            for emb, seg, ep in candidates:
+                emb_vec = emb.embedding
+                if hasattr(emb_vec, "tolist"):
+                    emb_vec = emb_vec.tolist()
+                elif isinstance(emb_vec, str):
+                    import json
+                    emb_vec = json.loads(emb_vec)
+
+                sim = cosine_similarity(query_vector, emb_vec)
+                if sim >= request.similarity_threshold:
+                    scored_results.append((sim, emb, seg, ep))
+
+            scored_results.sort(key=lambda x: x[0], reverse=True)
+            top_results = scored_results[:request.limit]
 
         # 5. Format results
         result_items: List[SearchResultItem] = []

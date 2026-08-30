@@ -78,6 +78,82 @@ class LocalStorageService(BaseStorageService):
 
         return audio_url, raw_filename, file_size, content_type
 
+    def save_bytes(self, contents: bytes, filename: str, content_type: Optional[str] = None) -> Tuple[str, str, int, str]:
+        raw_filename = filename or "audio.mp3"
+        clean_name = sanitize_filename(raw_filename)
+        mime = content_type or "audio/mpeg"
+        file_size = len(contents)
+
+        # Perform strict validation
+        self.validate_file(raw_filename, mime, file_size)
+
+        # Create unique file name
+        unique_prefix = f"{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+        saved_filename = f"{unique_prefix}_{clean_name}"
+        destination_path = os.path.join(self.storage_dir, saved_filename)
+
+        with open(destination_path, "wb") as f:
+            f.write(contents)
+
+        audio_url = f"/storage/{saved_filename}"
+        return audio_url, raw_filename, file_size, mime
+
+    async def save_stream(
+        self,
+        stream_iterator,
+        filename: str,
+        content_type: Optional[str] = None,
+        max_size_bytes: Optional[int] = None,
+    ) -> Tuple[str, str, int, str]:
+        raw_filename = filename or "audio.mp3"
+        clean_name = sanitize_filename(raw_filename)
+        mime = content_type or "audio/mpeg"
+
+        # Validate filename and extension upfront
+        if not raw_filename:
+            raise ValidationException("Filename cannot be empty.")
+        _, ext = os.path.splitext(raw_filename.lower())
+        if ext not in ALLOWED_EXTENSIONS:
+            raise ValidationException(
+                f"Unsupported audio file extension '{ext}'. Allowed extensions: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+            )
+
+        limit_bytes = max_size_bytes or (settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024)
+        unique_prefix = f"{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+        saved_filename = f"{unique_prefix}_{clean_name}"
+        destination_path = os.path.join(self.storage_dir, saved_filename)
+        temp_path = destination_path + ".tmp"
+
+        total_bytes = 0
+        try:
+            with open(temp_path, "wb") as f:
+                async for chunk in stream_iterator:
+                    if not chunk:
+                        continue
+                    total_bytes += len(chunk)
+                    if total_bytes > limit_bytes:
+                        raise ValidationException(
+                            f"Streaming file size ({total_bytes / (1024 * 1024):.1f}MB) exceeded maximum limit of {limit_bytes / (1024 * 1024):.0f}MB."
+                        )
+                    f.write(chunk)
+
+            if total_bytes == 0:
+                raise ValidationException("Downloaded audio stream is empty (0 bytes).")
+
+            # Rename temp file to final destination atomically
+            os.replace(temp_path, destination_path)
+        except Exception:
+            # Clean up partial temporary file immediately on error
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
+            raise
+
+        audio_url = f"/storage/{saved_filename}"
+        return audio_url, raw_filename, total_bytes, mime
+
     def delete_file(self, audio_url: str) -> bool:
         if not audio_url:
             return False
@@ -97,3 +173,10 @@ class LocalStorageService(BaseStorageService):
         filename = os.path.basename(audio_url)
         filepath = os.path.join(self.storage_dir, filename)
         return filepath if os.path.exists(filepath) else None
+
+    def file_exists(self, audio_url: str) -> bool:
+        path = self.get_file_path(audio_url)
+        return path is not None and os.path.exists(path)
+
+# Domain aliases
+LocalAudioStorage = LocalStorageService

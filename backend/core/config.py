@@ -54,11 +54,26 @@ class Settings(BaseSettings):
         "audio/flac",
     ]
 
-    # Embedding & AI
+    # Embedding & AI Settings
+    EMBEDDING_PROVIDER: str = "mock"     # "mock", "fastembed", "openai"
     EMBEDDING_DIMENSION: int = 1536
     DEFAULT_TRANSCRIPTION_MODEL: str = "whisper-large-v3"
-    DEFAULT_EMBEDDING_MODEL: str = "text-embedding-3-small"
+    DEFAULT_EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
     
+    # Transcription Provider Settings
+    TRANSCRIPTION_PROVIDER: str = "mock"  # "mock", "faster_whisper", "whisper"
+    WHISPER_MODEL_SIZE: str = "base"     # "tiny", "base", "small", "medium", "large-v3"
+    WHISPER_DEVICE: str = "auto"         # "cpu", "cuda", "auto"
+    WHISPER_COMPUTE_TYPE: str = "default" # "int8", "float16", "default"
+
+    # Speaker Diarization Provider Settings
+    DIARIZATION_PROVIDER: str = "mock"    # "mock", "pyannote", "acoustic"
+    HUGGINGFACE_AUTH_TOKEN: Union[str, None] = None
+
+    # AI Insight Provider Settings
+    INSIGHT_PROVIDER: str = "auto"        # "auto", "gemini", "openai", "mock"
+    DEFAULT_INSIGHT_MODEL: str = "gemini-2.5-flash"
+
     # Optional External AI API Keys
     OPENAI_API_KEY: Union[str, None] = None
     GEMINI_API_KEY: Union[str, None] = None

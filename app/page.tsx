@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { 
   Plus, 
@@ -16,7 +16,9 @@ import {
   Sparkles, 
   Layers,
   ChevronRight,
-  UploadCloud
+  UploadCloud,
+  Rss,
+  FileAudio
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -36,8 +38,8 @@ export default function DashboardPage() {
           getEpisodes(),
           getProcessingJobs()
         ]);
-        setEpisodes(episodesData);
-        setJobs(jobsData);
+        setEpisodes(episodesData || []);
+        setJobs(jobsData || []);
       } catch (err) {
         console.warn('Failed to fetch dashboard data:', err);
       } finally {
@@ -46,6 +48,19 @@ export default function DashboardPage() {
     }
     loadDashboardData();
   }, []);
+
+  const totalDurationHours = useMemo(() => {
+    const totalSeconds = episodes.reduce((acc, ep) => acc + (ep.duration || 0), 0);
+    return (totalSeconds / 3600).toFixed(1);
+  }, [episodes]);
+
+  const completedCount = useMemo(() => {
+    return episodes.filter(e => (e.status || '').toLowerCase() === 'completed' || (e.status || '').toLowerCase() === 'indexed').length;
+  }, [episodes]);
+
+  const activeJobsCount = useMemo(() => {
+    return jobs.filter(j => !['completed', 'failed', 'complete'].includes((j.status || '').toLowerCase())).length;
+  }, [jobs]);
 
   const recentSearches = [
     { query: 'database connection pooling bottleneck', time: '2 hours ago', matchCount: 4 },
@@ -84,7 +99,7 @@ export default function DashboardPage() {
           <Link href="/episodes">
             <Button variant="accent" className="gap-2">
               <UploadCloud className="w-4 h-4" />
-              Upload Episode
+              Episode Library
             </Button>
           </Link>
         </div>
@@ -94,23 +109,23 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <MetricCard 
           label="Indexed Audio Content" 
-          value="1,245" 
+          value={totalDurationHours} 
           unit="hrs" 
-          subtext="across 28 episodes" 
+          subtext={`across ${episodes.length} episodes (${completedCount} indexed)`} 
           icon={Headphones} 
         />
         <MetricCard 
-          label="Vector Embeddings" 
-          value="4.28" 
-          unit="M" 
-          subtext="1536-dim pgvector chunks" 
-          icon={Database} 
+          label="Active Pipeline Workers" 
+          value={String(activeJobsCount)} 
+          unit="tasks" 
+          subtext={`${jobs.length} total processing jobs`} 
+          icon={Activity} 
         />
         <MetricCard 
-          label="Avg Search Latency" 
-          value="38" 
-          unit="ms" 
-          subtext="cosine similarity query" 
+          label="Vector Engine" 
+          value="pgvector" 
+          unit="HNSW" 
+          subtext="FastEmbed 384-dim semantic search" 
           icon={Zap} 
         />
       </div>
@@ -131,35 +146,50 @@ export default function DashboardPage() {
           </div>
 
           <div className="border border-[var(--color-border)] rounded-lg bg-[var(--color-surface)] overflow-hidden divide-y divide-[var(--color-border)]">
-            {(episodes.length > 0 ? episodes.slice(0, 4) : defaultEpisodes).map((ep) => (
-              <div key={ep.id} className="p-4 hover:bg-[var(--color-surface-hover)] transition-colors flex items-center justify-between gap-4 group">
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-8 h-8 rounded-md bg-[var(--color-surface-elevated)] border border-[var(--color-border)] flex items-center justify-center shrink-0 group-hover:border-[var(--color-accent)] transition-colors">
-                    <Play className="w-3.5 h-3.5 text-[var(--color-muted)] group-hover:text-[var(--color-accent)] transition-colors" />
-                  </div>
-                  <div className="min-w-0">
-                    <Link href={`/episodes/${ep.id}`} className="text-sm font-medium text-[var(--color-primary)] hover:text-[var(--color-accent)] transition-colors truncate block">
-                      {ep.title}
-                    </Link>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-[var(--color-muted)] font-mono">
-                      <span>{ep.project_name || 'Engineering Podcast'}</span>
-                      <span>•</span>
-                      <span>{formatDuration(ep.duration)}</span>
-                      <span>•</span>
-                      <span>{ep.status}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <Link href={`/episodes/${ep.id}/player`}>
-                    <Button variant="secondary" size="sm" className="h-7 text-xs">
-                      Play & Transcript
+            {episodes.length === 0 ? (
+              <div className="p-10 text-center text-[var(--color-muted)] space-y-3">
+                <FileAudio className="w-7 h-7 mx-auto opacity-40 text-[var(--color-muted)]" />
+                <p className="text-xs font-medium text-[var(--color-primary)]">No episodes ingested yet</p>
+                <p className="text-[11px] text-[var(--color-muted)]">Import an RSS feed or upload an audio file to start generating semantic transcripts.</p>
+                <div className="flex items-center justify-center gap-2 pt-2">
+                  <Link href="/episodes">
+                    <Button variant="accent" size="sm" className="text-xs gap-1.5 h-7">
+                      <UploadCloud className="w-3 h-3" /> Go to Library
                     </Button>
                   </Link>
                 </div>
               </div>
-            ))}
+            ) : (
+              episodes.slice(0, 5).map((ep) => (
+                <div key={ep.id} className="p-4 hover:bg-[var(--color-surface-hover)] transition-colors flex items-center justify-between gap-4 group">
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="w-8 h-8 rounded-md bg-[var(--color-surface-elevated)] border border-[var(--color-border)] flex items-center justify-center shrink-0 group-hover:border-[var(--color-accent)] transition-colors">
+                      <Play className="w-3.5 h-3.5 text-[var(--color-muted)] group-hover:text-[var(--color-accent)] transition-colors" />
+                    </div>
+                    <div className="min-w-0">
+                      <Link href={`/episodes/${ep.id}`} className="text-sm font-medium text-[var(--color-primary)] hover:text-[var(--color-accent)] transition-colors truncate block">
+                        {ep.title}
+                      </Link>
+                      <div className="flex items-center gap-3 mt-1 text-xs text-[var(--color-muted)] font-mono">
+                        <span>{ep.project_name || 'General'}</span>
+                        <span>•</span>
+                        <span>{formatDuration(ep.duration)}</span>
+                        <span>•</span>
+                        <span className="capitalize">{ep.status}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Link href={`/episodes/${ep.id}/player`}>
+                      <Button variant="secondary" size="sm" className="h-7 text-xs">
+                        Play & Transcript
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
 
           {/* Quick Semantic Searches Section */}
@@ -201,32 +231,38 @@ export default function DashboardPage() {
           </div>
 
           <div className="p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] space-y-5">
-            {(jobs.length > 0 ? jobs.slice(0, 4) : defaultJobs).map((job, idx) => (
-              <div key={job.id || idx} className="space-y-2 border-b border-[var(--color-border)] last:border-b-0 pb-4 last:pb-0">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-medium text-[var(--color-primary)] truncate max-w-[170px]">
-                    {job.episode_title || 'Episode Processing'}
-                  </span>
-                  <Badge variant={job.status === 'completed' ? 'success' : job.status === 'failed' ? 'error' : 'warning'} dot>
-                    {job.current_stage || job.status}
-                  </Badge>
-                </div>
-                
-                <div className="w-full h-1.5 bg-[var(--color-surface-elevated)] rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full rounded-full transition-all duration-300 ${
-                      job.status === 'completed' ? 'bg-emerald-500' : job.status === 'failed' ? 'bg-rose-500' : 'bg-indigo-500'
-                    }`}
-                    style={{ width: `${job.progress || (job.status === 'completed' ? 100 : 45)}%` }}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between text-[10px] font-mono text-[var(--color-muted)]">
-                  <span>{job.progress || (job.status === 'completed' ? 100 : 45)}%</span>
-                  <span>{job.status === 'completed' ? 'Indexed' : 'Processing'}</span>
-                </div>
+            {jobs.length === 0 ? (
+              <div className="py-6 text-center text-xs text-[var(--color-muted)]">
+                No recent background jobs.
               </div>
-            ))}
+            ) : (
+              jobs.slice(0, 4).map((job, idx) => (
+                <div key={job.id || idx} className="space-y-2 border-b border-[var(--color-border)] last:border-b-0 pb-4 last:pb-0">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-medium text-[var(--color-primary)] truncate max-w-[170px]">
+                      {job.episode_title || 'Episode Processing'}
+                    </span>
+                    <Badge variant={job.status === 'completed' ? 'success' : job.status === 'failed' ? 'error' : 'accent'} dot>
+                      {job.current_stage || job.status}
+                    </Badge>
+                  </div>
+                  
+                  <div className="w-full h-1.5 bg-[var(--color-surface-elevated)] rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        job.status === 'completed' ? 'bg-emerald-500' : job.status === 'failed' ? 'bg-rose-500' : 'bg-indigo-500'
+                      }`}
+                      style={{ width: `${job.progress || (job.status === 'completed' ? 100 : 0)}%` }}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between text-[10px] font-mono text-[var(--color-muted)]">
+                    <span>{job.progress || (job.status === 'completed' ? 100 : 0)}%</span>
+                    <span>{job.duration_formatted || (job.status === 'completed' ? 'Indexed' : 'Processing')}</span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -259,21 +295,8 @@ function MetricCard({ label, value, unit, subtext, icon: Icon }: {
 }
 
 function formatDuration(seconds?: number): string {
-  if (!seconds) return '45:22';
+  if (!seconds || seconds <= 0) return '0:00';
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
 }
-
-const defaultEpisodes: any[] = [
-  { id: 'ep-001', title: 'Scaling Distributed Systems', project_name: 'Engineering Podcast', duration: 2722, status: 'completed' },
-  { id: 'ep-002', title: 'React Server Components Architecture', project_name: 'Frontend Masters', duration: 4325, status: 'completed' },
-  { id: 'ep-003', title: 'Database Indexing Strategies', project_name: 'Data Engineering', duration: 2295, status: 'completed' },
-  { id: 'ep-004', title: 'Vector Search & AI Agents', project_name: 'AI Weekly', duration: 3340, status: 'completed' },
-];
-
-const defaultJobs: any[] = [
-  { id: 'job-1', episode_title: 'Scaling Distributed Systems', current_stage: 'completed', status: 'completed', progress: 100 },
-  { id: 'job-2', episode_title: 'React Server Components', current_stage: 'chunking', status: 'processing', progress: 65 },
-  { id: 'job-3', episode_title: 'Database Indexing Strategies', current_stage: 'completed', status: 'completed', progress: 100 },
-];

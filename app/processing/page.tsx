@@ -76,11 +76,9 @@ export default function ProcessingPage() {
   const fetchJobs = async () => {
     try {
       const data = await getProcessingJobs();
-      if (data && data.length > 0) {
-        setJobs(data);
-      }
+      setJobs(data || []);
     } catch (err) {
-      console.warn('Backend processing jobs fallback:', err);
+      console.warn('Backend processing jobs error:', err);
     } finally {
       setLoading(false);
     }
@@ -312,11 +310,13 @@ function formatDisplayStage(stage: string, status: string): string {
   const stageMap: Record<string, string> = {
     upload: 'Uploaded',
     queued: 'Queued',
+    downloading: 'Downloading audio',
     transcribing: 'Transcribing',
     speaker_detection: 'Identifying speakers',
     chunking: 'Temporal chunking',
     embedding: 'Generating embeddings',
     indexing: 'Vector indexing',
+    insights: 'Synthesizing AI insights',
   };
   return stageMap[normStage] || stage || 'Processing';
 }

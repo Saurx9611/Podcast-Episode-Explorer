@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from backend.core.database import SessionLocal, get_db
 from backend.repositories.user_repo import UserRepository
 from backend.repositories.project_repo import ProjectRepository
+from backend.repositories.podcast_repo import PodcastRepository
 from backend.repositories.episode_repo import EpisodeRepository
 from backend.repositories.search_repo import SearchRepository
 from backend.repositories.processing_repo import ProcessingRepository
@@ -18,6 +19,9 @@ def get_user_repo(db: Session = Depends(get_db)) -> UserRepository:
 
 def get_project_repo(db: Session = Depends(get_db)) -> ProjectRepository:
     return ProjectRepository(db)
+
+def get_podcast_repo(db: Session = Depends(get_db)) -> PodcastRepository:
+    return PodcastRepository(db)
 
 def get_episode_repo(db: Session = Depends(get_db)) -> EpisodeRepository:
     return EpisodeRepository(db)

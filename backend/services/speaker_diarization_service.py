@@ -39,3 +39,17 @@ class MockSpeakerDiarizationService(BaseSpeakerDiarizationService):
 
         speaker_profiles = list(speaker_stats.values())
         return diarized_segments, speaker_profiles
+
+def get_speaker_diarization_service(provider: str = None) -> BaseSpeakerDiarizationService:
+    """Factory to retrieve the configured speaker diarization service."""
+    from backend.core.config import settings
+    selected_provider = (provider or settings.DIARIZATION_PROVIDER or "mock").lower()
+
+    if selected_provider == "pyannote":
+        from backend.services.pyannote_diarization_service import PyannoteSpeakerDiarizationService
+        return PyannoteSpeakerDiarizationService()
+    elif selected_provider in ("acoustic", "real"):
+        from backend.services.pyannote_diarization_service import AcousticSpeakerDiarizationService
+        return AcousticSpeakerDiarizationService()
+
+    return MockSpeakerDiarizationService()

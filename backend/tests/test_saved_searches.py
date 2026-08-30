@@ -31,7 +31,7 @@ def test_saved_searches_crud_flow(client, user_and_episode):
         "filters": ["Engineering", "All Speakers"],
     }
     res_create = client.post("/api/search/saved", json=create_payload, headers=headers)
-    assert res_create.status_code == 200
+    assert res_create.status_code in (200, 201)
     created = res_create.json()
     assert created["name"] == "Database Scaling Queries"
     assert created["user_id"] == "user-saved-test"

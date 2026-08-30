@@ -1,6 +1,7 @@
 from backend.core.database import Base
 from .user import User
 from .project import Project
+from .podcast import Podcast
 from .episode import Episode
 from .speaker import Speaker
 from .transcript_segment import TranscriptSegment
@@ -14,6 +15,7 @@ __all__ = [
     "Base",
     "User",
     "Project",
+    "Podcast",
     "Episode",
     "Speaker",
     "TranscriptSegment",

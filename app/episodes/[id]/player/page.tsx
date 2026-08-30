@@ -80,12 +80,12 @@ function PlayerContent({ id }: { id: string }) {
           getTranscript(id)
         ]);
         setEpisode(epData);
-        setSpeakers(spkData);
-        if (trData && trData.length > 0) {
+        setSpeakers(spkData || []);
+        if (trData) {
           setTranscript(trData);
         }
       } catch (err) {
-        console.warn('Using fallback player data for episode:', id);
+        console.warn('Backend player data fetch error:', err);
       }
     }
 

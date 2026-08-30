@@ -2,11 +2,13 @@ import os
 from typing import List, Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, BackgroundTasks
+from sqlalchemy.orm import Session
+from backend.core.database import get_db
 from backend.api.dependencies import get_episode_repo, get_processing_repo, get_current_user_id
 from backend.repositories.episode_repo import EpisodeRepository
 from backend.repositories.processing_repo import ProcessingRepository
 from backend.schemas.episode_schemas import (
-    EpisodeResponse, EpisodeCreate, EpisodeUpdate, EpisodeUploadResponse,
+    EpisodeResponse, EpisodeCreate, EpisodeUpdate, EpisodeUploadResponse, EpisodeDownloadResponse,
     TranscriptSegmentResponse, SpeakerResponse, SpeakerUpdate, EpisodeInsightResponse
 )
 from backend.schemas.processing_schemas import ProcessingJobResponse
@@ -14,7 +16,7 @@ from backend.models.episode import Episode
 from backend.models.processing_job import ProcessingJob
 from backend.storage import storage_service
 from backend.workers import pipeline_processor
-from backend.services import insight_service
+from backend.services import insight_service, audio_downloader_service
 from backend.core.exceptions import NotFoundException
 
 router = APIRouter(prefix="/episodes", tags=["episodes"])
@@ -44,6 +46,7 @@ def format_date(dt: Optional[datetime]) -> str:
 def enrich_episode_response(ep: Episode) -> EpisodeResponse:
     data = EpisodeResponse.model_validate(ep)
     data.project_name = ep.project.name if ep.project else "Unassigned"
+    data.podcast_title = ep.podcast.title if ep.podcast else None
     data.duration_formatted = format_duration(ep.duration)
     data.file_size_formatted = format_file_size(ep.file_size)
     data.date_formatted = format_date(ep.created_at)
@@ -52,6 +55,7 @@ def enrich_episode_response(ep: Episode) -> EpisodeResponse:
 @router.get("", response_model=List[EpisodeResponse])
 def list_episodes(
     project_id: Optional[str] = Query(None),
+    podcast_id: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
     skip: int = Query(0, ge=0),
@@ -60,6 +64,7 @@ def list_episodes(
 ):
     episodes = episode_repo.get_episodes(
         project_id=project_id,
+        podcast_id=podcast_id,
         status=status,
         query=q,
         skip=skip,
@@ -124,6 +129,25 @@ def get_episode(
     if not episode:
         raise NotFoundException("Episode", id)
     return enrich_episode_response(episode)
+
+@router.post("/{id}/download", response_model=EpisodeDownloadResponse)
+async def download_episode(
+    id: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Downloads remote audio for an episode from its external URL using chunked streaming.
+    Saves audio directly through AudioStorageService and updates the episode state.
+    """
+    updated_ep = await audio_downloader_service.download_episode_audio(db=db, episode_id=id)
+    return EpisodeDownloadResponse(
+        id=updated_ep.id,
+        status=updated_ep.status,
+        title=updated_ep.title,
+        audio_url=updated_ep.audio_url,
+        file_size=updated_ep.file_size,
+        message=f"Episode '{updated_ep.title}' audio downloaded successfully.",
+    )
 
 @router.post("/{id}/process", response_model=ProcessingJobResponse)
 def process_episode(
@@ -269,4 +293,27 @@ async def get_episode_insights(
             architecture=data.get("architecture", []),
             resume_bullet=data.get("resume_bullet"),
         )
+    return EpisodeInsightResponse.model_validate(insight)
+
+@router.post("/{id}/insights/generate", response_model=EpisodeInsightResponse)
+async def generate_episode_insights(
+    id: str,
+    episode_repo: EpisodeRepository = Depends(get_episode_repo),
+):
+    """Explicitly force a fresh AI generation of episode architectural insights."""
+    episode = episode_repo.get_by_id(id)
+    if not episode:
+        raise NotFoundException("Episode", id)
+
+    segments = episode_repo.get_transcript(id)
+    transcript_text = " ".join(s.text for s in segments)
+    data = await insight_service.generate_insights(episode.title, transcript_text)
+    insight = episode_repo.upsert_insights(
+        episode_id=id,
+        overview=data.get("overview"),
+        competencies=data.get("competencies", []),
+        technologies=data.get("technologies", []),
+        architecture=data.get("architecture", []),
+        resume_bullet=data.get("resume_bullet"),
+    )
     return EpisodeInsightResponse.model_validate(insight)

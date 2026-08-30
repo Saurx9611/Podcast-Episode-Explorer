@@ -16,7 +16,9 @@ import {
   Check,
   Sparkles,
   Play,
-  Layers
+  Layers,
+  Rss,
+  RefreshCw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,24 +33,15 @@ import {
   TableCell 
 } from '@/components/ui/table';
 import { getEpisodes, uploadEpisode, deleteEpisode, Episode } from '@/lib/api/episodes';
+import { importPodcast } from '@/lib/api/podcasts';
 import { getProjects, Project } from '@/lib/api/projects';
 import { EpisodeInsightModal } from '@/components/episodes/EpisodeInsightModal';
 
-const FALLBACK_EPISODES: Episode[] = [
-  { id: 'ep-001', title: 'Scaling Distributed Systems Without Sacrificing Reliability', project_name: 'Engineering Podcast', duration_formatted: '45:22', date_formatted: 'Oct 24, 2023', status: 'Indexed', created_at: '', updated_at: '' },
-  { id: 'ep-002', title: 'React Server Components Deep Dive & Streaming', project_name: 'Frontend Masters', duration_formatted: '1:12:05', date_formatted: 'Oct 23, 2023', status: 'Indexed', created_at: '', updated_at: '' },
-  { id: 'ep-003', title: 'Machine Learning Ops Pipeline Best Practices', project_name: 'Data Engineering', duration_formatted: '38:15', date_formatted: 'Today', status: 'Processing', created_at: '', updated_at: '' },
-  { id: 'ep-004', title: 'The Future of AI Agents & Cognitive Architectures', project_name: 'Tech Trends', duration_formatted: '55:40', date_formatted: 'Oct 22, 2023', status: 'Indexed', created_at: '', updated_at: '' },
-  { id: 'ep-005', title: 'Kubernetes Networking & eBPF Deep Dive', project_name: 'DevOps Weekly', duration_formatted: '42:18', date_formatted: 'Oct 21, 2023', status: 'Indexed', created_at: '', updated_at: '' },
-  { id: 'ep-006', title: 'Building a Vector Database with pgvector & HNSW', project_name: 'Engineering Podcast', duration_formatted: '1:05:30', date_formatted: 'Oct 20, 2023', status: 'Indexed', created_at: '', updated_at: '' },
-  { id: 'ep-007', title: 'Corrupted Audio Stream Sample', project_name: 'Unknown Project', duration_formatted: '0:00', date_formatted: 'Oct 19, 2023', status: 'Failed', created_at: '', updated_at: '' },
-  { id: 'ep-008', title: 'Interview with Distributed Systems Architect', project_name: 'Tech Trends', duration_formatted: '48:12', date_formatted: 'Oct 18, 2023', status: 'Indexed', created_at: '', updated_at: '' },
-];
-
 export default function EpisodesPage() {
-  const [episodes, setEpisodes] = useState<Episode[]>(FALLBACK_EPISODES);
+  const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<'All' | 'Processing' | 'Indexed' | 'Failed'>('All');
 
@@ -63,6 +56,14 @@ export default function EpisodesPage() {
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // RSS Import Modal State
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [importFeedUrl, setImportFeedUrl] = useState('');
+  const [importAutoProcess, setImportAutoProcess] = useState(true);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSuccess, setImportSuccess] = useState<string | null>(null);
+
   // Active action menu state
   const [actionMenuEpisodeId, setActionMenuEpisodeId] = useState<string | null>(null);
 
@@ -73,12 +74,12 @@ export default function EpisodesPage() {
   const fetchEpisodeData = async () => {
     try {
       setLoading(true);
+      setError(null);
       const data = await getEpisodes();
-      if (data && data.length > 0) {
-        setEpisodes(data);
-      }
-    } catch (err) {
-      console.warn('Backend episodes fallback:', err);
+      setEpisodes(data || []);
+    } catch (err: any) {
+      console.error('Backend episodes error:', err);
+      setError(err.message || 'Unable to connect to backend.');
     } finally {
       setLoading(false);
     }
@@ -87,7 +88,7 @@ export default function EpisodesPage() {
   const fetchProjectData = async () => {
     try {
       const projs = await getProjects();
-      setProjects(projs);
+      setProjects(projs || []);
     } catch {
       // Ignored
     }
@@ -147,6 +148,39 @@ export default function EpisodesPage() {
     }
   };
 
+  const handleImportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!importFeedUrl.trim()) {
+      setImportError('Please enter a valid podcast RSS feed URL.');
+      return;
+    }
+
+    try {
+      setIsImporting(true);
+      setImportError(null);
+      setImportSuccess(null);
+
+      const res = await importPodcast({
+        feed_url: importFeedUrl.trim(),
+        auto_download_latest: importAutoProcess,
+        auto_process_latest: importAutoProcess,
+      });
+
+      setImportSuccess(`Imported "${res.podcast.title}" with ${res.imported_episodes_count} episodes!`);
+      await fetchEpisodeData();
+
+      setTimeout(() => {
+        setIsImportOpen(false);
+        setImportFeedUrl('');
+        setImportSuccess(null);
+      }, 1500);
+    } catch (err: any) {
+      setImportError(err.message || 'Failed to import podcast RSS feed. Please check URL.');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!confirm('Are you sure you want to delete this episode?')) return;
@@ -203,10 +237,16 @@ export default function EpisodesPage() {
           <h1 className="text-2xl font-semibold text-[var(--color-primary)] tracking-tight">Episode Library</h1>
           <p className="text-xs sm:text-sm text-[var(--color-secondary)]">Search, playback, and extract intelligence from recorded conversations.</p>
         </div>
-        <Button onClick={() => setIsUploadOpen(true)} variant="accent" className="gap-2 text-xs">
-          <Upload className="w-3.5 h-3.5" />
-          Upload Episode
-        </Button>
+        <div className="flex items-center gap-2.5">
+          <Button onClick={() => setIsImportOpen(true)} variant="secondary" className="gap-2 text-xs">
+            <Rss className="w-3.5 h-3.5 text-amber-400" />
+            Import RSS Feed
+          </Button>
+          <Button onClick={() => setIsUploadOpen(true)} variant="accent" className="gap-2 text-xs">
+            <Upload className="w-3.5 h-3.5" />
+            Upload Episode
+          </Button>
+        </div>
       </div>
 
       {/* Toolbar */}
@@ -230,6 +270,19 @@ export default function EpisodesPage() {
         </div>
       </div>
 
+      {/* Error state */}
+      {error && (
+        <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-lg flex items-center justify-between gap-3 text-xs text-rose-400">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={fetchEpisodeData} className="h-7 text-xs gap-1.5">
+            <RefreshCw className="w-3 h-3" /> Retry
+          </Button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="border border-[var(--color-border)] rounded-lg overflow-hidden bg-[var(--color-surface)]">
         <Table>
@@ -243,15 +296,40 @@ export default function EpisodesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredEpisodes.length === 0 ? (
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center py-12 text-[var(--color-muted)]">
+                  <div className="flex flex-col items-center justify-center space-y-2">
+                    <Loader2 className="w-6 h-6 animate-spin text-[var(--color-accent)]" />
+                    <p className="text-xs font-mono text-[var(--color-muted)]">Loading episodes from database...</p>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : filteredEpisodes.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center py-12 text-[var(--color-muted)]">
                   <div className="flex flex-col items-center justify-center space-y-2">
                     <FileAudio className="w-7 h-7 opacity-40 text-[var(--color-muted)]" />
-                    <p className="text-xs font-medium text-[var(--color-primary)]">No episodes match your search criteria</p>
-                    <Button variant="outline" size="sm" onClick={() => { setSearchQuery(''); setActiveFilter('All'); }} className="text-xs h-7">
-                      Clear filters
-                    </Button>
+                    <p className="text-xs font-medium text-[var(--color-primary)]">
+                      {searchQuery ? "No episodes match your search criteria" : "No episodes in database"}
+                    </p>
+                    <p className="text-[11px] text-[var(--color-muted)]">
+                      {searchQuery ? "Try clearing your filters" : "Upload an audio file or import an RSS feed to begin."}
+                    </p>
+                    {searchQuery ? (
+                      <Button variant="outline" size="sm" onClick={() => { setSearchQuery(''); setActiveFilter('All'); }} className="text-xs h-7">
+                        Clear filters
+                      </Button>
+                    ) : (
+                      <div className="flex items-center gap-2 pt-2">
+                        <Button variant="secondary" size="sm" onClick={() => setIsImportOpen(true)} className="text-xs h-7 gap-1.5">
+                          <Rss className="w-3 h-3 text-amber-400" /> Import RSS
+                        </Button>
+                        <Button variant="accent" size="sm" onClick={() => setIsUploadOpen(true)} className="text-xs h-7 gap-1.5">
+                          <Upload className="w-3 h-3" /> Upload File
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>
@@ -267,7 +345,7 @@ export default function EpisodesPage() {
                     <div className="text-[11px] text-[var(--color-muted)] font-mono mt-0.5">{ep.project_name || 'General'}</div>
                   </TableCell>
                   <TableCell className="text-[var(--color-muted)] font-mono text-xs">
-                    {ep.duration_formatted || '45:22'}
+                    {ep.duration_formatted || '00:00'}
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={ep.status} />
@@ -305,28 +383,13 @@ export default function EpisodesPage() {
             )}
           </TableBody>
         </Table>
-        
-        {/* Pagination Footer */}
-        <div className="px-4 py-2.5 border-t border-[var(--color-border)] flex items-center justify-between text-xs font-mono text-[var(--color-muted)] bg-[var(--color-surface-elevated)]/30">
-          <div>{filteredEpisodes.length} total episodes</div>
-          <div className="flex gap-1.5">
-            <Button variant="outline" size="sm" disabled className="h-7 text-xs px-2.5">Previous</Button>
-            <Button variant="outline" size="sm" disabled className="h-7 text-xs px-2.5">Next</Button>
-          </div>
-        </div>
       </div>
 
-      {/* Upload Audio Modal */}
+      {/* Upload Modal */}
       <Modal
         isOpen={isUploadOpen}
-        onClose={() => {
-          if (!isUploading) {
-            setIsUploadOpen(false);
-            setUploadError(null);
-            setUploadSuccess(null);
-          }
-        }}
-        title="Upload Audio File"
+        onClose={() => setIsUploadOpen(false)}
+        title="Upload Episode"
         description="Upload an MP3, WAV, M4A, or AAC file to transcribe, detect speakers, and generate semantic embeddings."
         footer={
           <div className="flex items-center gap-2">
@@ -437,6 +500,85 @@ export default function EpisodesPage() {
             <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-md flex items-center gap-2 text-xs text-emerald-400">
               <Check className="w-3.5 h-3.5 shrink-0" />
               <span>{uploadSuccess}</span>
+            </div>
+          )}
+        </form>
+      </Modal>
+
+      {/* RSS Import Modal */}
+      <Modal
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        title="Import Podcast from RSS Feed"
+        description="Ingest podcast show metadata and episodes directly from an active RSS/Atom or Apple Podcasts XML feed."
+        footer={
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="secondary" 
+              onClick={() => setIsImportOpen(false)}
+              disabled={isImporting}
+              size="sm"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleImportSubmit}
+              disabled={isImporting || !importFeedUrl.trim()}
+              variant="accent"
+              size="sm"
+              className="gap-2"
+            >
+              {isImporting ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Importing Feed...
+                </>
+              ) : (
+                <>
+                  <Rss className="w-3.5 h-3.5" />
+                  Import Feed
+                </>
+              )}
+            </Button>
+          </div>
+        }
+      >
+        <form onSubmit={handleImportSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-[var(--color-muted)]">Podcast RSS Feed URL</label>
+            <Input 
+              placeholder="https://example.com/podcast/feed.xml" 
+              value={importFeedUrl}
+              onChange={(e) => setImportFeedUrl(e.target.value)}
+              disabled={isImporting}
+              className="h-8 text-xs font-mono"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            <input 
+              type="checkbox"
+              id="autoProcessCheck"
+              checked={importAutoProcess}
+              onChange={(e) => setImportAutoProcess(e.target.checked)}
+              className="rounded border-[var(--color-border)] bg-[var(--color-surface-elevated)]"
+            />
+            <label htmlFor="autoProcessCheck" className="text-xs text-[var(--color-secondary)] cursor-pointer">
+              Automatically download and queue latest episode for processing
+            </label>
+          </div>
+
+          {importError && (
+            <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 rounded-md flex items-center gap-2 text-xs text-rose-400">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              <span>{importError}</span>
+            </div>
+          )}
+
+          {importSuccess && (
+            <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-md flex items-center gap-2 text-xs text-emerald-400">
+              <Check className="w-3.5 h-3.5 shrink-0" />
+              <span>{importSuccess}</span>
             </div>
           )}
         </form>

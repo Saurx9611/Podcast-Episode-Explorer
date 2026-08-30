@@ -102,12 +102,12 @@ function SearchContent() {
         limit: 15,
       });
 
-      if (res && res.results && res.results.length > 0) {
+      if (res && res.results) {
         setResults(res.results);
-        setExecutionTime(res.execution_time_ms);
+        setExecutionTime(res.execution_time_ms || 0);
       }
-    } catch (err) {
-      console.warn('Backend search unavailable, keeping current view:', err);
+    } catch (err: any) {
+      console.warn('Backend search error:', err);
     } finally {
       setLoading(false);
     }
